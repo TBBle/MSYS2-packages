@@ -1,0 +1,115 @@
+From 5c7809d3d8fbfab64cbafa6f4fd6f56b37128e16 Mon Sep 17 00:00:00 2001
+From: "Paul \"TBBle\" Hampson" <Paul.Hampson@Pobox.com>
+Date: Fri, 27 Apr 2018 02:32:46 +1000
+Subject: [PATCH 26/27] Disable FAST_CWD when Wine is detected
+
+Wine doesn't use FAST_CWD internally, so manipulating the PEB is
+sufficient for replacing the CWD Directory Handle.
+---
+ winsup/cygwin/cygheap.h |  4 +++-
+ winsup/cygwin/path.cc   | 29 ++++++++++++++++++++++++++++-
+ 2 files changed, 31 insertions(+), 2 deletions(-)
+
+diff --git a/winsup/cygwin/cygheap.h b/winsup/cygwin/cygheap.h
+index abbf9ec07..ed58285e6 100644
+--- a/winsup/cygwin/cygheap.h
++++ b/winsup/cygwin/cygheap.h
+@@ -204,7 +204,8 @@ public:
+ enum fcwd_version_t {
+   FCWD_OLD,
+   FCWD_W7,
+-  FCWD_W8
++  FCWD_W8,
++  FCWD_DISABLED
+ };
+ 
+ /* This class is used to store the CWD.  The CWD storage in the
+@@ -281,6 +282,7 @@ public:
+   void FillIn (HANDLE dir, PUNICODE_STRING name, ULONG old_dismount_count);
+   static void SetDirHandleFromBufferPointer (PWCHAR buf_p, HANDLE dir);
+   static void SetVersionFromPointer (PBYTE buf_p, bool is_buffer);
++  static void Disable (void);
+ };
+ 
+ class cwdstuff
+diff --git a/winsup/cygwin/path.cc b/winsup/cygwin/path.cc
+index 1e1ba9c3d..936dc33cd 100644
+--- a/winsup/cygwin/path.cc
++++ b/winsup/cygwin/path.cc
+@@ -3947,6 +3947,7 @@ fcwd_access_t::SetFSCharacteristics (LONG val)
+   /* Special case FSCharacteristics.  Didn't exist originally. */
+   switch (fast_cwd_version ())
+     {
++    case FCWD_DISABLED:
+     case FCWD_OLD:
+       break;
+     case FCWD_W7:
+@@ -4033,6 +4034,8 @@ fcwd_access_t::SetDirHandleFromBufferPointer (PWCHAR buf_p, HANDLE dir)
+   fcwd_access_t *f_cwd;
+   switch (fast_cwd_version ())
+     {
++    case FCWD_DISABLED:
++      return;
+     case FCWD_OLD:
+     default:
+       f_cwd = (fcwd_access_t *)
+@@ -4070,10 +4073,19 @@ fcwd_access_t::SetVersionFromPointer (PBYTE buf_p, bool is_buffer)
+     fast_cwd_version () = FCWD_OLD;
+ }
+ 
++void
++fcwd_access_t::Disable (void)
++{
++  fast_cwd_version () = FCWD_DISABLED;
++}
++
+ /* This function scans the code in ntdll.dll to find the address of the
+    global variable used to access the CWD.  While the pointer is global,
+    it's not exported from the DLL, unfortunately.  Therefore we have to
+-   use some knowledge to figure out the address. */
++   use some knowledge to figure out the address.
++   If we happen to be running under Wine, returns -1 to disable this
++   whole mechanism, as Wine's implementation does not have FAST_CWD.
++   */
+ 
+ #ifdef __x86_64__
+ 
+@@ -4086,6 +4098,10 @@ find_fast_cwd_pointer ()
+   HMODULE ntdll = GetModuleHandle ("ntdll.dll");
+   if (!ntdll)
+     return NULL;
++  const uint8_t *wine_get_version = (const uint8_t *)
++			   GetProcAddress (ntdll, "wine_get_version");
++  if (wine_get_version)
++    return (fcwd_access_t **) -1;
+   const uint8_t *get_dir = (const uint8_t *)
+ 			   GetProcAddress (ntdll, "RtlGetCurrentDirectory_U");
+   const uint8_t *ent_crit = (const uint8_t *)
+@@ -4185,6 +4201,10 @@ find_fast_cwd_pointer ()
+   HMODULE ntdll = GetModuleHandle ("ntdll.dll");
+   if (!ntdll)
+     return NULL;
++  const uint8_t *wine_get_version = (const uint8_t *)
++			   GetProcAddress (ntdll, "wine_get_version");
++  if (wine_get_version)
++    return (fcwd_access_t **) -1;
+   const uint8_t *get_dir = (const uint8_t *)
+ 			   GetProcAddress (ntdll, "RtlGetCurrentDirectory_U");
+   const uint8_t *ent_crit = (const uint8_t *)
+@@ -4280,6 +4300,13 @@ find_fast_cwd ()
+      we have to make sure we know the version of the FAST_CWD structure
+      used on the system. */
+   fcwd_access_t **f_cwd_ptr = find_fast_cwd_pointer ();
++  if (f_cwd_ptr == (fcwd_access_t **) -1)
++  {
++      /* FAST_CWD is disabled with prejudice e.g., Wine. In effect, the
++	 PEB is canonical, so changing that is sufficient */
++      fcwd_access_t::Disable ();
++      return NULL;
++  }
+   if (!f_cwd_ptr)
+     small_printf ("Cygwin WARNING:\n"
+ "  Couldn't compute FAST_CWD pointer.  This typically occurs if you're using\n"
+-- 
+2.16.2.windows.1
+

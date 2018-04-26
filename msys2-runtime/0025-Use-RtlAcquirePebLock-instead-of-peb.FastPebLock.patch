@@ -1,0 +1,33 @@
+From 3c3e60fdef10970b6646c220a3e69f8c43fa13ef Mon Sep 17 00:00:00 2001
+From: "Paul \"TBBle\" Hampson" <Paul.Hampson@Pobox.com>
+Date: Sat, 28 Apr 2018 17:17:27 +1000
+Subject: [PATCH 25/27] Use RtlAcquirePebLock instead of peb.FastPebLock
+
+Older Wine versions did not use peb.FastPebLock. This is the only
+code-path that Wine shoudl hit, so the other uses of peb.FastPebLock
+have been retained.
+---
+ winsup/cygwin/path.cc | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/winsup/cygwin/path.cc b/winsup/cygwin/path.cc
+index cf6422341..1e1ba9c3d 100644
+--- a/winsup/cygwin/path.cc
++++ b/winsup/cygwin/path.cc
+@@ -4402,11 +4402,11 @@ cwdstuff::override_win32_cwd (bool init, ULONG old_dismount_count)
+ 	}
+       else if (upp_cwd_hdl == NULL)
+ 	return;
+-      RtlEnterCriticalSection (peb.FastPebLock);
++      RtlAcquirePebLock ();
+       fcwd_access_t::SetDirHandleFromBufferPointer(upp_cwd_str.Buffer, dir);
+       h = upp_cwd_hdl;
+       upp_cwd_hdl = dir;
+-      RtlLeaveCriticalSection (peb.FastPebLock);
++      RtlReleasePebLock ();
+       /* The handle on init is always a fresh one, not the handle inherited
+ 	 from the parent process.  We always have to close it here. */
+       NtClose (h);
+-- 
+2.16.2.windows.1
+

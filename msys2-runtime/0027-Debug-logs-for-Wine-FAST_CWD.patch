@@ -1,0 +1,55 @@
+From 9d981752f7cfb16eb6b6f008d87cec5ba68a1c14 Mon Sep 17 00:00:00 2001
+From: "Paul \"TBBle\" Hampson" <Paul.Hampson@Pobox.com>
+Date: Sat, 28 Apr 2018 17:19:08 +1000
+Subject: [PATCH 27/27] Debug logs for Wine FAST_CWD
+
+---
+ winsup/cygwin/path.cc | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/winsup/cygwin/path.cc b/winsup/cygwin/path.cc
+index 936dc33cd..a77732a67 100644
+--- a/winsup/cygwin/path.cc
++++ b/winsup/cygwin/path.cc
+@@ -4304,6 +4304,7 @@ find_fast_cwd ()
+   {
+       /* FAST_CWD is disabled with prejudice e.g., Wine. In effect, the
+ 	 PEB is canonical, so changing that is sufficient */
++      small_printf ("Wine detected, disabling FAST_CWD\n\n");
+       fcwd_access_t::Disable ();
+       return NULL;
+   }
+@@ -4444,6 +4445,7 @@ cwdstuff::override_win32_cwd (bool init, ULONG old_dismount_count)
+ void
+ cwdstuff::init ()
+ {
++  small_printf ("cwdstff::init: start\n\n");
+   cwd_lock.init ("cwd_lock");
+ 
+   /* Cygwin processes inherit the cwd from their parent.  If the win32 path
+@@ -4459,12 +4461,14 @@ cwdstuff::init ()
+       /* Initially re-open the cwd to allow POSIX semantics. */
+       set (NULL, NULL);
+     }
++  small_printf ("cwdstff::init: done\n\n");
+ }
+ 
+ /* Chdir and fill out the elements of a cwdstuff struct. */
+ int
+ cwdstuff::set (path_conv *nat_cwd, const char *posix_cwd)
+ {
++  small_printf ("cwdstff::set: start\n\n");
+   NTSTATUS status;
+   UNICODE_STRING upath;
+   PEB &peb = *NtCurrentTeb ()->Peb;
+@@ -4715,6 +4719,7 @@ cwdstuff::set (path_conv *nat_cwd, const char *posix_cwd)
+   stpcpy (posix, posix_cwd);
+ 
+   cwd_lock.release ();
++  small_printf ("cwdstff::set: done\n\n");
+   return 0;
+ }
+ 
+-- 
+2.16.2.windows.1
+
